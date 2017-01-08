@@ -3,7 +3,7 @@
 //  MobileDeviceDetectionTest
 //
 //  Created by Nobuhiro Ito on 2017/01/06.
-//  Copyright © 2017年 Nobuhiro Ito. All rights reserved.
+//  Copyright © 2017 Nobuhiro Ito. All rights reserved.
 //
 
 #import "EBIMobileDeviceWatcher.h"
