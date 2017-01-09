@@ -1,0 +1,16 @@
+PODS:
+  - EBIMobileDeviceWatcher (0.1.0)
+
+DEPENDENCIES:
+  - EBIMobileDeviceWatcher (from `..`)
+
+EXTERNAL SOURCES:
+  EBIMobileDeviceWatcher:
+    :path: ..
+
+SPEC CHECKSUMS:
+  EBIMobileDeviceWatcher: d98e9626a6c4ef8fc3e1ec909470da1158726fbe
+
+PODFILE CHECKSUM: dd93f8c7ea80aedb70ce68fdd9eef0351c392922
+
+COCOAPODS: 1.1.1
