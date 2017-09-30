@@ -24,6 +24,7 @@
     @property (assign) CFRunLoopRef runLoop;
     @property (assign) IONotificationPortRef notificationPort;
     @property (assign) CFRunLoopSourceRef notificationRunLoopSource;
+    @property NSThread *runningThread;
 
     - (void) onIOSDeviceMatchedCallback:(io_iterator_t)iterator;
     - (void) onAndroidInterfaceMatchedCallback:(io_iterator_t)iterator;
@@ -83,82 +84,86 @@ void EBIMobileDeviceWatcherDeviceTerminatedCallback(void* refcon, io_iterator_t 
         
         self.active = YES;
         
-        __weak typeof(self) bself = self;
-        [NSThread detachNewThreadWithBlock:^{
-            NSLog(@"Watching thread start");
-            
-            bself.runLoop = CFRunLoopGetCurrent();
-            bself.notificationPort = IONotificationPortCreate(kIOMasterPortDefault);
-            bself.notificationRunLoopSource = IONotificationPortGetRunLoopSource(bself.notificationPort);
-            CFRunLoopAddSource(bself.runLoop, bself.notificationRunLoopSource, kCFRunLoopDefaultMode);
-            
-            [bself.mutableDevices removeAllObjects];
-            [bself.delegate mobileDeviceWatcherStarted:bself];
-            
-            io_iterator_t iosDeviceMatchedIter;
-            io_iterator_t androidInterfaceMatchedIter;
-            io_iterator_t deviceTerminatedIter;
+        self.runningThread = [[NSThread alloc] initWithTarget:self selector:@selector(watchingThreadAction) object:nil];
+        [self.runningThread start];
+    }
 
-            // for iOS Device Matched
-            {
-                CFMutableDictionaryRef matchingDict = IOServiceMatching(kIOUSBDeviceClassName);
-                CFDictionaryAddValue(matchingDict, CFSTR(kIOPropertyMatchKey),
-                                     (CFDictionaryRef) @{ @"SupportsIPhoneOS": @YES });
-                
-                IOServiceAddMatchingNotification(bself.notificationPort,
-                                                 kIOMatchedNotification,
-                                                 matchingDict,
-                                                 EBIMobileDeviceWatcherIOSDeviceMatchedCallback,
-                                                 (__bridge void *)(bself),
-                                                 &iosDeviceMatchedIter);
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [bself onIOSDeviceMatchedCallback:iosDeviceMatchedIter];
-                });
-            }
+    - (void) watchingThreadAction
+    {
+        NSLog(@"Watching thread start");
+        
+        self.runLoop = CFRunLoopGetCurrent();
+        self.notificationPort = IONotificationPortCreate(kIOMasterPortDefault);
+        self.notificationRunLoopSource = IONotificationPortGetRunLoopSource(self.notificationPort);
+        CFRunLoopAddSource(self.runLoop, self.notificationRunLoopSource, kCFRunLoopDefaultMode);
+        
+        [self.mutableDevices removeAllObjects];
+        [self.delegate mobileDeviceWatcherStarted:self];
+        
+        io_iterator_t iosDeviceMatchedIter;
+        io_iterator_t androidInterfaceMatchedIter;
+        io_iterator_t deviceTerminatedIter;
+        
+        // for iOS Device Matched
+        {
+            CFMutableDictionaryRef matchingDict = IOServiceMatching(kIOUSBDeviceClassName);
+            CFDictionaryAddValue(matchingDict, CFSTR(kIOPropertyMatchKey),
+                                 (CFDictionaryRef) @{ @"SupportsIPhoneOS": @YES });
             
-            // for Android Interface
-            {
-                IOServiceAddMatchingNotification(bself.notificationPort,
-                                                 kIOMatchedNotification,
-                                                 IOServiceMatching(kIOUSBInterfaceClassName),
-                                                 EBIMobileDeviceWatcherAndroidInterfaceMatchedCallback,
-                                                 (__bridge void *)(bself),
-                                                 &androidInterfaceMatchedIter);
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [bself onAndroidInterfaceMatchedCallback:androidInterfaceMatchedIter];
-                });
-            }
-            
-            // for Device Terminated
-            {
-                IOServiceAddMatchingNotification(bself.notificationPort,
-                                                 kIOTerminatedNotification,
-                                                 IOServiceMatching(kIOUSBDeviceClassName),
-                                                 EBIMobileDeviceWatcherDeviceTerminatedCallback,
-                                                 (__bridge void *)(bself),
-                                                 &deviceTerminatedIter);
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [bself onDeviceTerminateCallback:deviceTerminatedIter];
-                });
-            }
-            
-            CFRunLoopRun();
-            NSLog(@"Watching thread stop");
-
-            IOObjectRelease(iosDeviceMatchedIter);
-            IOObjectRelease(androidInterfaceMatchedIter);
-            IOObjectRelease(deviceTerminatedIter);
-
-            CFRunLoopRemoveSource(bself.runLoop, bself.notificationRunLoopSource, kCFRunLoopDefaultMode);
-            IONotificationPortDestroy(bself.notificationPort);
-            
-            bself.notificationRunLoopSource = NULL;
-            bself.notificationPort = NULL;
-            bself.runLoop = NULL;
-            bself.active = NO;
-
-            [bself.delegate mobileDeviceWatcherStopped:bself];
-        }];
+            IOServiceAddMatchingNotification(self.notificationPort,
+                                             kIOMatchedNotification,
+                                             matchingDict,
+                                             EBIMobileDeviceWatcherIOSDeviceMatchedCallback,
+                                             (__bridge void *)(self),
+                                             &iosDeviceMatchedIter);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self onIOSDeviceMatchedCallback:iosDeviceMatchedIter];
+            });
+        }
+        
+        // for Android Interface
+        {
+            IOServiceAddMatchingNotification(self.notificationPort,
+                                             kIOMatchedNotification,
+                                             IOServiceMatching(kIOUSBInterfaceClassName),
+                                             EBIMobileDeviceWatcherAndroidInterfaceMatchedCallback,
+                                             (__bridge void *)(self),
+                                             &androidInterfaceMatchedIter);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self onAndroidInterfaceMatchedCallback:androidInterfaceMatchedIter];
+            });
+        }
+        
+        // for Device Terminated
+        {
+            IOServiceAddMatchingNotification(self.notificationPort,
+                                             kIOTerminatedNotification,
+                                             IOServiceMatching(kIOUSBDeviceClassName),
+                                             EBIMobileDeviceWatcherDeviceTerminatedCallback,
+                                             (__bridge void *)(self),
+                                             &deviceTerminatedIter);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self onDeviceTerminateCallback:deviceTerminatedIter];
+            });
+        }
+        
+        CFRunLoopRun();
+        NSLog(@"Watching thread stop");
+        
+        IOObjectRelease(iosDeviceMatchedIter);
+        IOObjectRelease(androidInterfaceMatchedIter);
+        IOObjectRelease(deviceTerminatedIter);
+        
+        CFRunLoopRemoveSource(self.runLoop, self.notificationRunLoopSource, kCFRunLoopDefaultMode);
+        IONotificationPortDestroy(self.notificationPort);
+        
+        self.notificationRunLoopSource = NULL;
+        self.notificationPort = NULL;
+        self.runLoop = NULL;
+        self.active = NO;
+        self.runningThread = nil;
+        
+        [self.delegate mobileDeviceWatcherStopped:self];
     }
     
     - (void)stopWatching
